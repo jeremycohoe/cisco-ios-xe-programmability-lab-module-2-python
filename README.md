@@ -1,356 +1,323 @@
-## [IOS XE Programmability Lab](https://github.com/jeremycohoe/cisco-ios-xe-programmability-lab)
+
+## **[IOS XE Programmability Lab](https://github.com/jeremycohoe/cisco-ios-xe-programmability-lab)**
+
+## **Module: Python**
+
+## Topics Covered 
+Getting Started with Python
+
+Basic Python
+
+Your first script 
 
 
-## Module: Model Driven Telemetry
-
-## Topics Covered:
-Model-Driven Telemetry
-
-Verify clock synchronization
-
-Configured Subscriptions**
-
-Explore Telegraf
-
-Exploring InfluxdDB
-
-Grafana Dashboard
-
-Conclusion
+## Getting Started with Python
 
 
-# Model-Driven Telemetry
+We will begin this lab with a very simple introduction to Python, the most commonly used scripting language for network automation.
 
-Network data collection for today s high-density platforms and scale is becoming a tedious task for monitoring and troubleshooting. There is a need for operational data from different devices in the network to be collected in a centralized location, so that cross-functional groups can collaboratively work to analyze and fix an issue.
+## Basic Python
 
-**Model-driven Telemetry** (MDT) provides a mechanism to stream data from an MDT-capable device to a destination. It uses a new approach for network monitoring in which data is streamed from network devices continuously using a push model and provides near real-time access to operational statistics for monitoring data. Applications can subscribe to specific data items they need, by using standards-based YANG data models over open protocols. Structured data is published at a defined cadence or on-change, based upon the subscription criteria and data type.
+There are two ways to run Python:
 
- There are two main MDT Publication/Subscription models, Dial-in and Dial-out:
+**Interactive Mode**. In interactive mode, you enter Python commands which are immediately executed by the Python interpreter.
 
-**Dial-in** is a dynamic model. An application based on this model has to open a session to the network device and send one or more subscriptions reusing the same session. The network device will send the publications to the application for as long as the session stays up.
+**Script Mode**. In this mode, you have saved a Python script to a text file and will be running the entire script.
 
-**Dial-out** is a configured model **.** The subscriptions need to be statically configured on the network device using any of the available interfaces (CLI, APIs, etc.) and the device will open a session with the application. If the session goes down, the device will try to open a new session.
+We will begin with the interpreter so you can gain some basic experience.
 
-![](1-pubsub.png)
+1. Open a SSH session to your Ubuntu Server. Double-click the **MobaXterm** icon on the desktop.
 
-In this lab we cover the **gRPC Dial-out** telemetry that was released in IOS XE 16.10 along with the open source software stack for collection and visualization:
+2. Move into the **python** directory.
 
-- **Telegraf (Collection)** with the **cisco\_telemetry\_mdt** plugin that decodes the gRPC data to text
-- **InfluxDB (Storage)**: an open-source time series database optimized for fast, high-availability storage and retrieval of time series data in fields such as operations monitoring, application metrics, Internet of Things sensor data, and real-time analytics. It provides a SQL-like language with built-in time functions for querying a data structure composed of measurements, series, and points
-- **Grafana (GUI visualization)**: an open-source platform to build monitoring and analytics dashboards
-
-Every LAB POD includes a full installation of all the above-mentioned software.
-
-**Verify clock synchronization (optional - only required if troubleshooting)**
-
-When collecting data from any source, a key requirement is a precise and reliable time reference. If the data source and the collector clocks are not aligned, the data becomes inaccurate and can lead to misleading interpretations of a system state.
-
-This lab relies on NTP (Network Time Protocol) to keep all the devices in sync with the Ubuntu Linux Server acting as NTP master. Ensure the NTP configuration is correct on the C9300 with the show clock command
-
-1. From the Windows Jump Host desktop, connect to each of the IOS XE devices and check that the current time is correct and that the NTP server is configured.
+3. Type **python** to enter the Python shell
 
 ```
-c9300# show clock
-	...
-c9300# sh run | include ntp
-ntp server 10.1.1.3
-
-
-csr1000# show clock
-	...
-csr1000# sh run | include ntp
-ntp server 10.1.1.3
-
-
-C9800# show clock
-	...
-C9800# sh run | include ntp
-ntp server 10.1.1.3
+auto@automation:~$ 
+	
+cd python
+	
+auto@automation:~/python$
+	
+auto@automation:~/python$ python
 ```
 
-**Ensure that the time is in-sync between the IOS XE devices.**
-
-1. On the Windows Jump Host desktop, double-click on the **Ubuntu** icon to open a PuTTY session. Check NTP status and verify NTP is syncronized
-
+4. This will put you at an interactive prompt. Type a network engineer's version of "Hello world!", the first program coders try in any new language:
 
 ```
-
-auto@automation:~$ date
-
-Wed Oct 9 09:02:12 PDT 2029
-
-If required, manually set the time:
-
-$ sudo date +%Y%m%d -s "19990612"
-
-$ sudo date +%T -s  "09:00:00"
-
-
-```
-Finally on the Windows Jump Host confirm the time is correct. In order to sync the time if it is not correct, right click on the time, select  "Adjust date\time", select the  "Internet Time" tab and then  "Change settings" then  "Update now"
-
-You may need to click  "Update now" several times before the Windows host is able to successful synchronize with the NTP time source.
-
-The time is in now sync across all hosts.
-
-![](2-ntp-on-windows.png)
-
-
-# **gRPC Dial-Out Configured Subscriptions**
-
-Lets continue by checking the subscriptions configured on the Catalyst 9300.
-
-1. On the Windows Jump Host desktop, double-click on the **Cat9300** icon to open a PuTTY session to the switch.
-
-1. Check the subscription configured on the device using the following IOS XE CLI
-
-**C9300# show run | sec telemetry**
-
-![](3-showrunsectel.png)
-
-Lets analyze the main parts of the subscription configuration:
-
-- telemetry ietf subscription 101 (subscription ID)
-- encoding encode-kvgpb (Key-Value pair encoding)
-- filter xpath /process-cpu-ios-xe-oper:cpu-usage/cpu-utilization/five-seconds (xpath)
-- update-policy periodic 500 (period in 1/100 seconds, 5 secs here)
-- receiver ip address 10.1.1.3 57500 protocol grpc-tcp (receivers IP, port and protocol)
-
-This telemetry configuration has already been applied to the switch. However, if it needs to be re-applied the following can be used to easily copy/paste:
-
-```
-conf t
-telemetry ietf subscription 101
- encoding encode-kvgpb
- filter xpath /process-cpu-ios-xe-oper:cpu-usage/cpu-utilization/five-seconds
- source-address 10.1.1.5
- stream yang-push
- update-policy periodic 500
- receiver ip address 10.1.1.3 57500 protocol grpc-tcp
-
+Python 3.5.2 (default, Apr 16 2020, 17:47:17)
+[GCC 5.4.0 20160609] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>>
+>>> print ("hello cisco programmability!")
+hello cisco programmability!
+>>>
 ```
 
-1. Verify the configured subscription using the following **telemetry** IOS XE CLIs
+![](1_hello_world.png)
 
-**c9300# sh telemetry ietf subscription all**
+5.  Let's take a look at variables in Python. A variable is used to represent a piece of data. Try the following:
+
+```
+>>> a = "Catalyst 9300"
+	
+>>> print (a)
+	
+Catalyst 9300
+	
+>>> b = 9500
+	
+>>> b
+	
+9500
+```
+
+![](2_variables.png)
+
+This shows a variable can be assigned to a text value or a number value. In the examples above we use the **print** statement to show the contents of a variable. In the Python interpreter one can examine the contents of a variable by simply typing its name:
+
+```
+>>> a
+	
+Catalyst 9300
+```
+
+Notice the value is returned within single quotes. This method is not applicable within Python scripts, thus the print statement is commonly used within Python scripts instead.
+
+6.  Now try the following:
+	
+```
+>>> c = ["Cisco", 'Catalyst', 12345]
+	
+>>> c[0]
+	
+'Cisco'
+	
+>>> c[1]
+	
+'Catalyst'
+	
+>>> c[2]
+	
+12345
+```
+	
+	
+In Python we can take a number of values and pack them into a single **list** variable. We can access any element of the list by placing the element number in square brackets; but keep in mind the numbering starts at [zero]{.underline}! In Python we can use single or double-quotes to denote a text string.
+	
+Note: A Python list is similar to an array in other languages, but unlike many languages, in Python we can mix variable types in a single list. (Strings, numbers, objects, etc.)
+
+7. Next, type the following into the interpreter
+
+```
+>>> for item in c:** for item in c:
+print (item)
+
+Cisco
+	
+Catalyst
+	
+12345
+	
+>>>
+```
+
+	
+We just iterated through a list using a **for** loop. Try iterating through the other variables we created (**a** and **b**). What happens and why?
+
+8. If you are familiar with **for** loops from another language, they may look a little different in Python. You probably remember iterating through a series of numbers. We can do this in Python as well, but we need to use a special syntax. Try the following
 
 ```
 
-  Telemetry subscription brief
-
-  ID               Type        State       Filter type
-  -----------------------------------------------------
-  101              Configured  Valid       xpath
-
-```
-
-
-**c9300# sh telemetry ietf subscription 101 detail**
-
-```
-Telemetry subscription detail:
-
-  Subscription ID: 101
-  Type: Configured
-  State: Valid
-  Stream: yang-push
-  Filter:
-    Filter type: xpath
-    XPath: /process-cpu-ios-xe-oper:cpu-usage/cpu-utilization/five-seconds
-  Update policy:
-    Update Trigger: periodic
-    Period: 500
-  Encoding: encode-kvgpb
-  Source VRF:
-  Source Address: 10.1.1.5
-  Notes:
-
-  Receivers:
-    Address          Port             Protocol         Protocol Profil
-    ------------------------------------------------------------------
-    10.1.1.3         57500            grpc-tcp
+>>> for n in range(1,4):** **\<Enter\>**
+	
+**print (n)** **\<Enter\>**
+	
+**\<Enter\>**
+	
+1
+	
+2
+	
+3
 
 ```
 
-**c9300# sh telemetry ietf subscription 101 receiver**
+The result may surprise you. Python stops before it gets to 4. This is normal, and you have to take this into account when using **range**. In most cases this means the range max value should be set to n+1.
+
+9. Math is very easy in Python. Let's add the number variables together:
 
 ```
-Telemetry subscription receivers detail:
-
-  Subscription ID: 101
-  Address: 10.1.1.3
-  Port: 57500
-  Protocol: grpc-tcp
-  Profile:
-  State: Connected
-  Explanation:
+>>> b + c[2]
+21845
+>>>
 ```
 
-
-The State should report **Connected**.
-
-If that state does not show Connected, for example, if it is the  "Connecting " state, then simple remove and re-add the telemetry configuration before continuing with the next steps and troubleshooting:
-
-```
-conf t
-no telemetry ietf subscription 101
-telemetry ietf subscription 101
- encoding encode-kvgpb
- filter xpath /process-cpu-ios-xe-oper:cpu-usage/cpu-utilization/five-seconds
- source-address 10.1.1.5
- stream yang-push
- update-policy periodic 500
- receiver ip address 10.1.1.3 57500 protocol grpc-tcp
-```
-
-
-Note: If the state does not show  "Connected " then ensure the Docker container with the Telegraf receiver is running correctly. Follow the next steps to confirm status of each component.
-
-**Explore Telegraf, Influx, Grafana (TIG)**
-
-![](4-mdt-solution.png)
-
-Telegraf is the tool that receives and decodes the telemetry data that is sent from the IOS XE devices. It processes the data and sends it into the InfluxDB datastore, where Grafana can access it in order to create visualizations.
-
-Telegraf runs inside the  "tig\_mdt " Docker container. To connect to this container from the Ubuntu host follow the steps below:
-
-**auto@automation:~$ docker ps**
-
-![](5-docker_ps.png)
-
-**auto@automation:~$ docker exec -it tig\_mdt /bin/bash**
-
-![](6-docker_exec_cat_grpc.png)
-
-Once inside the Docker container navigate to the telegraf directory and review the configuration file and log
-
-**# cd /root/telegraf**
-
-**# cat telegraf-grpc.conf**
-
-![](7-cat_telegraf_grpc.png)
-
-This configuration file shows us the following:
-
-**gRPC Dial-Out Telemetry Input:** This defines the telegraf plugin (cisco\_telemetry\_mdt) that is being used to receive the data, as well as the port (57500)
-
-**Output Plugin:** This defines where the received data is sent to (outputs.influxdb) the database to use (telegraf) and the URL for InfluxDB ([http://127.0.0.1:8086](http://127.0.0.1:8086/))
-
-**Outputs.file** : sends a copy of the data to the text file at /root/telegraf/telegraf.log
-
-These configuration options are defined as per the README file in each of the respective input or output plugins. For more details of the cisco\_telemetry\_mdt plugin that is in use here, see the page at [https://github.com/influxdata/telegraf/tree/master/plugins/inputs/cisco\_telemetry\_mdt](https://github.com/influxdata/telegraf/tree/master/plugins/inputs/cisco_telemetry_mdt)
-
-Examining the output of the telegraf.log file shows the data coming in from the IOS XE device that matches the subscription we created and do ctrl+c to stop the output
-
-**# tail -F /tmp/telegraf.log**
-
-![](7-cat_telegraf_grpc.png)
-
-**Exploring InfluxdDB**
-
-InfluxDB is already installed and started within the same Docker container. Lets verify it s working correctly by connecting into the Docker contain where it is running.
-
-1. Verify InfluxDB is running:
-
-**ps xa | grep influx**
+Note that we added the standalone variable **b** to the third item in our list **c**.
+	
+10. We can also use the plus operator to concatenate strings:
 
 ```
-15 pts/0 Sl+ 1:45 /usr/bin/influxd -pidfile /var/run/influxdb/influxd.pid -config /etc/influxdb/influxdb.conf
-
-```
-1. Lets verify the data stored on the Influx database using the command shown below:
-
-**influx**
-
-```
-root@43f8666d9ce0:~# influx
-Connected to http://localhost:8086 version 1.7.7
-InfluxDB shell version: 1.7.7
-> show databases
-name: databases
-name
-----
-_internal
-mdt_gnmi
-mdt_grpc
-cisco_mdt
-mdt_netconf
->
-> drop database cisco_mdt
-> quit
-root@43f8666d9ce0:~#
-root@43f8666d9ce0:~#
-root@43f8666d9ce0:~#
-root@43f8666d9ce0:~#
-root@43f8666d9ce0:~#
-root@43f8666d9ce0:~#
-root@43f8666d9ce0:~# influx
-Connected to http://localhost:8086 version 1.7.7
-InfluxDB shell version: 1.7.7
->
-> show databases
-name: databases
-name
-----
-_internal
-mdt_gnmi
-mdt_grpc
-mdt_netconf
->
-> use mdt_grpc
-Using database mdt_grpc
-> show measurements
-name: measurements
-name
-----
-Cisco-IOS-XE-process-cpu-oper:cpu-usage/cpu-utilization
->
-> SELECT COUNT("five_seconds") FROM "Cisco-IOS-XE-process-cpu-oper:cpu-usage/cpu-utilization"
-name: Cisco-IOS-XE-process-cpu-oper:cpu-usage/cpu-utilization
-time count
----- -----
-0    1134
->
+>>> d = c[0] + c[1] + 9500
+Traceback (most recent call last):
+File "<stdin>", line 1, in <module>
+TypeError: Can't convert 'int' object to str implicitly
+>>> d = c[0] + c[1] + "9500"
+>>> print (d)
+CiscoCatalyst9500
+>>>	
 ```
 
-The output above shows:
+Our first attempt to add these strings together failed, because 9500 is a number, not a string. We need to enclose it in quotes before Python will accept it.
+	
+This was great, except we needed to add spaces. An easier way to do this is with the **format** command:
+	
+```
+>>> d = "{} {} {}".format(c[0], c[1], "9500")
+>>> d
+'Cisco Catalyst 9500'
+>>>
+```
+	
+This syntax may look a little scary, but it is quite simple. **format** is a method (think function, or simply a command) that can be called on a text string. When invoked, **format** replaces any empty curly braces {} with the items in the parentheses, in sequence. Thus, we passed **format** our three text strings from our list "c" and it produced one big string "d", which included the spaces in between the curly braces.
 
-- a **telegraf** dababase as defined in the Telegraf config file which holds that telemry data
-- one measurement defined as the YANG model used for the gRPC Dial-out subscription (Cisco-IOS-XE-process-cpu-oper:cpu-usage/cpu-utilization)
-- number of publications received so far (33251).
 
-![](8-influx.png)
-
-# **Grafana Dashboard**
-
-Grafana is an open-source platform to build monitoring and analytics dashboards that also runs within the Docker container. Navigating to the web based user interface allows us to see the dashboard with the Model Driven Telemetry data
-
-1. Verify Grafana is running:
-
-**ps xa | grep grafana**
+11. Let's examine one more Python data structure before we move on. Python can store data in a **dictionary**, which is similar to a list. Unlike a list, however, you can retrieve information from dictionaries using **keys**, instead of numbered indexes. Try this:
 
 ```
-44 ? Sl 0:32 /usr/sbin/grafana-server --pidfile=/var/run/grafana-server.pid --config=/etc/grafana/grafana.ini --packaging=deb cfg:default.paths.provisioning=/etc/grafana/provisioning cfg:default.paths.data=/var/lib/grafana cfg:default.paths.logs=/var/log/grafan cfg:default.paths.plugins=/var/lib/grafana/plugins**
+>>> switch = {'name':'c9300', 'ip':'10.1.1.1', 'username':'admin', 'password':'cisco123'}
+>>> switch['name']
+'c9300'
+>>> switch['password']
+'cisco123'
+>>>
+```
+	
+Instead of a number we can access specific elements of a dictionary with key names. We still enclose the key in brackets, as we did with lists. We can also iterate through the dictionary using a **for** loop like we did before (try it if you have time.)
+	
+**Note**: If you are having trouble with the dictionary, be sure you used curly braces to define it, that you enclosed each key and value with quotes, and that you put commas between each value. Also note that while we define the dictionary with curly braces, we access each element with square brackets.
+	
+Congratulations! You've worked through many of the basics of Python. We will cover more Python syntax as we go through the lab.
+
+12. Type Ctrl-d or exit() to exit from python interactive shell
+
+# Your first script
+
+
+13.  Virtual environments is to create an isolated environment for the projects. This means that each project can have its own dependencies, regardless of what dependencies every other project has. In this lab you will run NCClient, Jinja2, netaddr and other packages in an isolated environment. Open the ubuntu terminal and activate virtual environment "v".
+
+auto@automation:~/python\$ **source v/bin/activate**
+
+```
+(v) auto@automation:~/python\$
+```
+
+Note: observe (v) at start of the 2nd line after you activated. This confirms that you are in virtual environment.
+
+14. On the Windows host, open **Sublime Text 3** from the Start menu. Press **ctrl-shift-P** and enter "syntax:python" into the text box that appears, followed by <Enter>. This will enable Python syntax highlighting.
+
+![](./3_syntax_hilight.png)
+
+Enter the following into the window:
+
+```
+# My first script
+
+import netaddr
+
+my_ip = netaddr.IPNetwork("192.168.222.130/29")
+print ("For {}, we have the following:".format(my_ip.ip))
+print ("Subnet: {}".format(my_ip.network))
+print ("Netmask: {}".format(my_ip.netmask))
+print ("Broadcast: {}".format(my_ip.broadcast))
+
+```
+
+Now, save the file as **z:\\ip.py.** Return to the Ubuntu CLI, and invoke the script from the command line with **python ip.py**. You should see the following:
+
+```
+(v) auto@automation:~/python\$ **python ip.py**
+
+For 192.168.222.130, we have the following:
+
+Subnet: 192.168.222.128
+
+Netmask: 255.255.255.248
+
+Broadcast: 192.168.222.135
+
+(v) auto@automation:~/python\$
 ```
 
 
-1. Open Firefox or Chrome and access the interface Grafana at [http://10.1.1.3:3000](http://10.1.1.3:3000/)
+In the simple script above, there are quite a few things going on.
 
- You should see the following dashboard after logging in with admin:Cisco123
+First, we added a comment to the script. Like a line in IOS that begins with "!", in Python, a line that begins with "\#" is ignored by the interpreter. Commenting your code makes it more readable, not only for others but for yourself!
 
-![](9-grafana-grpc.png)
+Next, we import a module called **netaddr**. This module contains functions for working with IP addresses, so you don't have to write the code yourself. Python has a huge number of modules you can install and access for free.
 
-To better understand the Grafana dashboard, lets edit the dashlet to see which data is being displayed:
+Then, we create an IP network object called **my\_ip**. When we create an object of type **IPNetwork**, we have to prefix it with the name of the module where we got the object type.
 
-1. Access the Grafan UI on HTT port 3000
-2. Click the ** "CPU Utilization – 5 Second "** drop-down and then select ** "Edit "**
+Finally, we print out the attributes of this IP address, using the format method we learned earlier. Our **netaddr** library gives our **IPNetwork** object several attributes, which we can access just by putting a dot and calling the attribute name. How do we know what attributes? Either from the documentation for the library or by using the Python dir() function!
 
-![](9b-grafana-edit.png)
+Start the Python interpreter entering Python in the Ubuntu CLI and type the following:
 
-1. Review the information this is pre-configured for this particular chart:
+```
+>>> import netaddr
+>>> my_ip = netaddr.IPNetwork("192.168.222.130/29")
+>>> type(my_ip)
+<class ‘netaddr.ip.IPNetwork’>
+>>> dir(netaddr.ip.IPNetwork)
+```
 
-![](9c-grafana-details.png)
+You should see the following:
 
-# **Conclusion**
+```
+<snip>
+, 'broadcast', 'cidr', 'first', 'hostmask', 'info', 'ip', 'ipv4', 'ipv6', 'is_ipv4_compat', 
+'is_ipv4_mapped', 'is_link_local', 'is_loopback', 'is_multicast', 'is_private', 'is_reserved', 
+'is_unicast', 'iter_hosts', 'key', 'last', 'netmask', 'network', 'next', 'prefixlen', 'previous', 
+'size', 'sort_key', 'subnet', 'supernet', 'value', 'version']
+>>>
+```
 
-This module has shown how to configure the gRPC Dial Out configured telemetry feature on IOS XE. Using the Docker container with the open-source Telegraf + InfluxDB + Grafana stack you were able to receive, store, and visualize the telemetry information.
+
+15. Our code would be more useful if we could re-use it and pump any address into it. Let's make it into a function. Return to the Sublime window and select the four print lines in the **z:\\ip.py** file and then indent them by pressing **ctrl-\]**. Then, add the following line above the indented statements:
+
+```
+def print_ip(my_ip):
+```
+
+Be sure the **def** line is **not** indented, and don't forget the colon! Now comment out this line by adding the \# to it:
+
+```
+#my_ip = netaddr.IPNetwork("192.168.222.130/29")
+```
+
+and add the following code *below* the print statements and save the file. (Note: do *not* indent the lines that come before **while**.)
+
+```
+raw_ip = input("Type an IP address <ENTER to quit>: ")
+
+while raw_ip != '':
+    ip = netaddr.IPNetwork(raw_ip)
+    print_ip(ip)
+    raw_ip = input("Type an IP address <ENTER to quit>: ")
+```
+
+
+Your final code should look like this (pay close attention to indentation):
+
+![](./4_sublime_ip_py.png)
+
+What happens when you run it? Try inputting a number of subnet/mask combinations. (Be sure to enter the addresses in slash notation, like this: **192.168.1.0/24)**
+
+We learned a few new things here:
+
+1.  We can re-use code by giving it a name and placing it after a **def** statement. We can pass variables to the new function.
+
+2.  Python is very whitespace-sensitive. If you did not indent your print statements, or the **while** block, the program won't work.
+
+3.  A **while** loop will iterate until the condition specified is met. In this case, we continue to execute the block of code under while until a blank string is encountered.
+
+**Note**: Why did we repeat the line inputting the IP address? If we didn't put the first one, **raw\_ip** would be undefined and Python would generate an error when it got to the **while** block. If we didn't put the second one, Python would just loop indefinitely printing the same output for the same IP! If this happens, hit Ctrl-C to stop it.
