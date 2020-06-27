@@ -54,7 +54,7 @@ hello cisco programmability!
 >>>
 ```
 
-![](1_hello_world.png)
+![](imgs/1_hello_world.png)
 
 5.  Let's take a look at variables in Python. A variable is used to represent a piece of data. Try the following:
 
@@ -72,7 +72,7 @@ Catalyst 9300
 9500
 ```
 
-![](2_variables.png)
+![](imgs/2_variables.png)
 
 This shows a variable can be assigned to a text value or a number value. In the examples above we use the **print** statement to show the contents of a variable. In the Python interpreter one can examine the contents of a variable by simply typing its name:
 
@@ -216,7 +216,7 @@ Note: observe (v) at start of the 2nd line after you activated. This confirms th
 
 14. On the Windows host, open **Sublime Text 3** from the Start menu. Press **ctrl-shift-P** and enter "syntax:python" into the text box that appears, followed by <Enter>. This will enable Python syntax highlighting.
 
-![](./3_syntax_hilight.png)
+![](imgs/3_syntax_hilight.png)
 
 Enter the following into the window:
 
@@ -308,7 +308,7 @@ while raw_ip != '':
 
 Your final code should look like this (pay close attention to indentation):
 
-![](./4_sublime_ip_py.png)
+![](imgs/4_sublime_ip_py.png)
 
 What happens when you run it? Try inputting a number of subnet/mask combinations. (Be sure to enter the addresses in slash notation, like this: **192.168.1.0/24)**
 
